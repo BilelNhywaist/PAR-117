@@ -1,9 +1,10 @@
 using UnityEngine;
+using UnityEngine.AI;
 
 public class Planet : MonoBehaviour
 {
 
-    [Range(2, 256)]
+    [Range(2, 255)]
     public int resolution = 10;
     TerrainFace[] terrainFaces;
     public Material planetMaterial;
@@ -38,27 +39,32 @@ public class Planet : MonoBehaviour
         }
 
         Vector3[] directions = {
-            Vector3.up,
-            Vector3.down,
-            Vector3.left,
-            Vector3.right,
-            Vector3.forward,
-            Vector3.back
+            Vector3.up, Vector3.down, Vector3.left,
+            Vector3.right, Vector3.forward, Vector3.back
         };
 
         for (int i = 0; i < 6; i++)
         {
             GameObject meshObj;
-            if (i < transform.childCount)
+            string faceName = "Face_" + i;
+
+            // On cherche l'enfant par son nom exact
+            Transform existingFace = transform.Find(faceName);
+
+            if (existingFace != null)
             {
-                meshObj = transform.GetChild(i).gameObject;
+                // La face existe, on la récupère
+                meshObj = existingFace.gameObject;
             }
             else
             {
-                meshObj = new GameObject("Face_" + i);
+                // La face n'existe pas, on la crée proprement
+                meshObj = new GameObject(faceName);
                 meshObj.transform.parent = transform;
                 meshObj.transform.localPosition = Vector3.zero;
             }
+
+            // Vérification et ajout des composants
             MeshRenderer meshRenderer = meshObj.GetComponent<MeshRenderer>();
             if (meshRenderer == null)
             {
@@ -81,7 +87,7 @@ public class Planet : MonoBehaviour
                 meshFilter.sharedMesh = new Mesh();
             }
 
-            terrainFaces[i] = new TerrainFace(meshFilter.sharedMesh, resolution, directions[i],this);
+            terrainFaces[i] = new TerrainFace(meshFilter.sharedMesh, resolution, directions[i], this);
         }
     }
 

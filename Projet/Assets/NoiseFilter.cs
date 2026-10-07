@@ -10,38 +10,38 @@ public class NoiseFilter
     public float minValue = 1f;
     public int numLayers = 4;
 
-    // Instanciation de l'OpenSimplex (on peut passer une seed)
-    OpenSimplexNoise noiseGenerator = new OpenSimplexNoise(42);
+    // La ligne 'OpenSimplexNoise noiseGenerator...' a été supprimée ici.
 
     public float Evaluate(Vector3 point)
     {
         float noiseValue = 0;
         float frequency = baseRoughness;
         float amplitude = 1;
-        float weight = 1f; // Permet de lisser le fond des vallées
+        float weight = 1f; // Poids pour adoucir le fond des vallées
 
         for (int i = 0; i < numLayers; i++)
         {
-            double x = point.x * frequency + center.x;
-            double y = point.y * frequency + center.y;
-            double z = point.z * frequency + center.z;
+            float x = point.x * frequency + center.x;
+            float y = point.y * frequency + center.y;
+            float z = point.z * frequency + center.z;
 
-            // On récupère la valeur brute (entre -1 et 1)
-            float v = (float)noiseGenerator.Evaluate(x, y, z);
+            // L'appel au nouveau bruit continu (méthode statique)
+            float v = SimplexNoise.Evaluate(x, y, z);
 
-            // Transformation "Ridged" : on inverse la valeur absolue
+            // Transformation "Ridged" pour des montagnes acérées
             v = 1 - Mathf.Abs(v);
-            v *= v; // On met au carré pour pincer les crêtes
-            v *= weight; // On applique le poids de l'octave précédente
-
-            weight = Mathf.Clamp01(v * 2f); // Modifie le relief des prochaines itérations
+            v *= v;
+            v *= weight;
+            weight = Mathf.Clamp01(v * 2f); // Modifie l'impact des prochaines octaves
 
             noiseValue += v * amplitude;
             frequency *= roughness;
             amplitude *= persistence;
         }
 
+        // Création d'un plancher bas (ex: pour lisser le fond des océans)
         noiseValue = Mathf.Max(0, noiseValue - minValue);
+
         return noiseValue * strength;
     }
 }

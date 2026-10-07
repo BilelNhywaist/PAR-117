@@ -26,7 +26,7 @@ public class TerrainFace
     {
         Vector3[] vertices = new Vector3[resolution * resolution];
         int[] triangles = new int[(resolution - 1) * (resolution - 1) * 6];
-        Color[] colors = new Color[vertices.Length]; // NOUVEAU
+        Color[] colors = new Color[vertices.Length];
         int triIndex = 0;
 
         for (int y = 0; y < resolution; y++)
@@ -37,25 +37,28 @@ public class TerrainFace
                 Vector2 percent = new Vector2(x, y) / (resolution - 1);
                 Vector3 pointOnUnitCube = localUp + (percent.x - .5f) * 2 * axisA + (percent.y - .5f) * 2 * axisB;
 
-                Vector3 p = pointOnUnitCube;
-                float x2 = p.x * p.x;
-                float y2 = p.y * p.y;
-                float z2 = p.z * p.z;
+                // Mapping sphérique parfait
+                float x2 = pointOnUnitCube.x * pointOnUnitCube.x;
+                float y2 = pointOnUnitCube.y * pointOnUnitCube.y;
+                float z2 = pointOnUnitCube.z * pointOnUnitCube.z;
 
                 Vector3 pointOnUnitSphere;
-                pointOnUnitSphere.x = p.x * Mathf.Sqrt(1f - y2 / 2f - z2 / 2f + (y2 * z2) / 3f);
-                pointOnUnitSphere.y = p.y * Mathf.Sqrt(1f - x2 / 2f - z2 / 2f + (x2 * z2) / 3f);
-                pointOnUnitSphere.z = p.z * Mathf.Sqrt(1f - x2 / 2f - y2 / 2f + (x2 * y2) / 3f);
+                pointOnUnitSphere.x = pointOnUnitCube.x * Mathf.Sqrt(1f - y2 / 2f - z2 / 2f + (y2 * z2) / 3f);
+                pointOnUnitSphere.y = pointOnUnitCube.y * Mathf.Sqrt(1f - x2 / 2f - z2 / 2f + (x2 * z2) / 3f);
+                pointOnUnitSphere.z = pointOnUnitCube.z * Mathf.Sqrt(1f - x2 / 2f - y2 / 2f + (x2 * y2) / 3f);
 
-                // Calcul de l'élévation
+                // Élévation
                 float elevation = noiseFilter.Evaluate(pointOnUnitSphere);
                 vertices[i] = pointOnUnitSphere * (1 + elevation);
 
-                // NOUVEAU : Détermination de la couleur
-                // On convertit l'élévation en pourcentage (0 à 1) basé sur la force maximale du bruit
-                float colorPercent = Mathf.InverseLerp(0, noiseFilter.strength, elevation);
-                colors[i] = planet.colorGradient.Evaluate(colorPercent);
+                // Couleur (sécurisée pour éviter les plantages si le gradient est vide)
+                if (planet.colorGradient != null)
+                {
+                    float colorPercent = Mathf.InverseLerp(0, planet.noiseStrength, elevation);
+                    colors[i] = planet.colorGradient.Evaluate(colorPercent);
+                }
 
+                // Triangles
                 if (x != resolution - 1 && y != resolution - 1)
                 {
                     triangles[triIndex] = i;
@@ -70,9 +73,15 @@ public class TerrainFace
         }
 
         mesh.Clear();
+
+        // ORDRE CRUCIAL : On dit à Unity d'accepter les gros maillages AVANT de lui donner les vertices
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
         mesh.vertices = vertices;
         mesh.triangles = triangles;
-        mesh.colors = colors; 
+        mesh.colors = colors;
+
+        // On laisse le moteur C++ interne de Unity calculer les ombres parfaitement
         mesh.RecalculateNormals();
     }
 }
