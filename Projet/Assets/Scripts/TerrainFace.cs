@@ -9,6 +9,7 @@ public class TerrainFace
     Vector3 axisB;
     Planet planet;
     NoiseFilter noiseFilter;
+
     public TerrainFace(Mesh mesh, int resolution, Vector3 localUp, Planet planet)
     {
         this.mesh = mesh;
@@ -22,14 +23,12 @@ public class TerrainFace
         axisA = new Vector3(localUp.y, localUp.z, localUp.x);
         axisB = Vector3.Cross(localUp, axisA);
     }
+
     public void ConstructMesh()
     {
         Vector3[] vertices = new Vector3[resolution * resolution];
         int[] triangles = new int[(resolution - 1) * (resolution - 1) * 6];
-
-        // 1. Initialisation du tableau des couleurs
         Color[] colors = new Color[vertices.Length];
-
         int triIndex = 0;
 
         for (int y = 0; y < resolution; y++)
@@ -40,7 +39,7 @@ public class TerrainFace
                 Vector2 percent = new Vector2(x, y) / (resolution - 1);
                 Vector3 pointOnUnitCube = localUp + (percent.x - .5f) * 2 * axisA + (percent.y - .5f) * 2 * axisB;
 
-                // Mapping sphérique
+                // Mapping sphérique sans distorsion
                 float x2 = pointOnUnitCube.x * pointOnUnitCube.x;
                 float y2 = pointOnUnitCube.y * pointOnUnitCube.y;
                 float z2 = pointOnUnitCube.z * pointOnUnitCube.z;
@@ -50,22 +49,20 @@ public class TerrainFace
                 pointOnUnitSphere.y = pointOnUnitCube.y * Mathf.Sqrt(1f - x2 / 2f - z2 / 2f + (x2 * z2) / 3f);
                 pointOnUnitSphere.z = pointOnUnitCube.z * Mathf.Sqrt(1f - x2 / 2f - y2 / 2f + (x2 * y2) / 3f);
 
-                // Calcul de l'élévation via le NoiseFilter
+                // Calcul de l'élévation locale
                 float elevation = noiseFilter.Evaluate(pointOnUnitSphere);
-                vertices[i] = pointOnUnitSphere * (1 + elevation);
 
-                // 2. CALCUL DE LA COULEUR
-                // On transforme l'élévation en une valeur entre 0 (fond) et 1 (sommet maximal théorique)
-                // L'élévation maximale dépend de votre "noiseStrength"
-                float colorPercent = Mathf.InverseLerp(0, planet.noiseStrength, elevation);
+                // Positionnement spatial combinant le rayon de base de la planète et l'élévation des montagnes
+                vertices[i] = pointOnUnitSphere * (planet.radius + elevation);
 
-                // On pioche la couleur correspondante dans le dégradé
+                // Application du dégradé selon l'altitude
                 if (planet.colorGradient != null)
                 {
+                    float colorPercent = Mathf.InverseLerp(0, planet.noiseStrength, elevation);
                     colors[i] = planet.colorGradient.Evaluate(colorPercent);
                 }
 
-                // Construction des triangles
+                // Configuration des triangles
                 if (x != resolution - 1 && y != resolution - 1)
                 {
                     triangles[triIndex] = i;
@@ -83,13 +80,7 @@ public class TerrainFace
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices;
         mesh.triangles = triangles;
-
-        // 3. Application des couleurs au maillage
         mesh.colors = colors;
-
         mesh.RecalculateNormals();
     }
 }
-
-
-        
