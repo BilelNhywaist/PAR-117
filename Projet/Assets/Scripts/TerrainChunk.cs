@@ -3,16 +3,16 @@ using UnityEngine;
 public class TerrainChunk
 {
     public GameObject meshObj;
+    MeshRenderer meshRenderer;
+    MeshFilter meshFilter;
     Mesh mesh;
 
-    // Paramètres Quadtree
     TerrainChunk[] children;
     bool hasChildren;
     int lodLevel;
     Vector2 offset;
     float extent;
 
-    // Paramètres Planète
     Vector3 localUp, axisA, axisB;
     Planet planet;
     Vector3 centerPointOnPlanet;
@@ -28,20 +28,19 @@ public class TerrainChunk
         axisA = new Vector3(localUp.y, localUp.z, localUp.x);
         axisB = Vector3.Cross(localUp, axisA);
 
-        // Création de l'objet 3D
         meshObj = new GameObject($"Chunk_LOD{lodLevel}");
         meshObj.transform.parent = parent;
         meshObj.transform.localPosition = Vector3.zero;
 
-        MeshRenderer meshRenderer = meshObj.AddComponent<MeshRenderer>();
-        MeshFilter meshFilter = meshObj.AddComponent<MeshFilter>();
+        // On stocke les références pour y accéder rapidement
+        meshRenderer = meshObj.AddComponent<MeshRenderer>();
+        meshFilter = meshObj.AddComponent<MeshFilter>();
 
         if (planet.planetMaterial != null) meshRenderer.sharedMaterial = planet.planetMaterial;
 
         mesh = new Mesh();
         meshFilter.sharedMesh = mesh;
 
-        // Calcul du centre exact de ce chunk pour évaluer la distance de la caméra
         Vector2 centerPercent = offset + new Vector2(0.5f, 0.5f) * extent;
         Vector3 pointOnCube = localUp + (centerPercent.x - 0.5f) * 2 * axisA + (centerPercent.y - 0.5f) * 2 * axisB;
         centerPointOnPlanet = pointOnCube.normalized * planet.radius;
@@ -51,14 +50,15 @@ public class TerrainChunk
 
     public void UpdateChunk(Vector3 viewerPosition)
     {
-        // La distance critique dépend de la taille du chunk (plus il est petit, plus il faut être près pour le diviser)
         float distanceToViewer = Vector3.Distance(centerPointOnPlanet, viewerPosition);
         float lodThreshold = planet.radius * extent * planet.lodDistanceMultiplier;
 
         if (distanceToViewer < lodThreshold && lodLevel < planet.maxLodLevel)
         {
             if (!hasChildren) Subdivide();
-            meshObj.SetActive(false); // Masque le maillage parent
+
+            // CRUCIAL : On masque uniquement l'image, on ne désactive pas l'objet
+            meshRenderer.enabled = false;
 
             foreach (TerrainChunk child in children)
             {
@@ -68,7 +68,9 @@ public class TerrainChunk
         else
         {
             if (hasChildren) Merge();
-            meshObj.SetActive(true); // Affiche le maillage parent
+
+            // Réaffiche le parent une fois les enfants détruits
+            meshRenderer.enabled = true;
         }
     }
 
@@ -77,7 +79,6 @@ public class TerrainChunk
         children = new TerrainChunk[4];
         float halfExtent = extent * 0.5f;
 
-        // Création des 4 enfants (Haut-Gauche, Haut-Droite, Bas-Gauche, Bas-Droite)
         children[0] = new TerrainChunk(lodLevel + 1, offset + new Vector2(0, halfExtent), halfExtent, localUp, planet, meshObj.transform);
         children[1] = new TerrainChunk(lodLevel + 1, offset + new Vector2(halfExtent, halfExtent), halfExtent, localUp, planet, meshObj.transform);
         children[2] = new TerrainChunk(lodLevel + 1, offset, halfExtent, localUp, planet, meshObj.transform);
@@ -93,10 +94,29 @@ public class TerrainChunk
         for (int i = 0; i < 4; i++)
         {
             children[i].Merge();
-            Object.Destroy(children[i].meshObj);
+            children[i].DestroyChunk(); // Appel de notre nettoyage complet
         }
         children = null;
         hasChildren = false;
+    }
+
+    public void DestroyChunk()
+    {
+        if (hasChildren) Merge();
+
+        // 1. Purge du maillage dans la mémoire vidéo
+        if (mesh != null)
+        {
+            if (Application.isPlaying) GameObject.Destroy(mesh);
+            else GameObject.DestroyImmediate(mesh);
+        }
+
+        // 2. Suppression propre de l'objet dans la hiérarchie
+        if (meshObj != null)
+        {
+            if (Application.isPlaying) GameObject.Destroy(meshObj);
+            else GameObject.DestroyImmediate(meshObj);
+        }
     }
 
     void ConstructMesh()
@@ -112,8 +132,6 @@ public class TerrainChunk
             for (int x = 0; x < res; x++)
             {
                 int i = x + y * res;
-
-                // Le pourcentage est désormais limité à la fraction du Quadtree (offset + extent)
                 Vector2 chunkPercent = offset + (new Vector2(x, y) / (res - 1)) * extent;
                 Vector3 pointOnUnitCube = localUp + (chunkPercent.x - 0.5f) * 2 * axisA + (chunkPercent.y - 0.5f) * 2 * axisB;
 

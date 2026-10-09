@@ -38,8 +38,6 @@ public class TerrainFace
                 int i = x + y * resolution;
                 Vector2 percent = new Vector2(x, y) / (resolution - 1);
                 Vector3 pointOnUnitCube = localUp + (percent.x - .5f) * 2 * axisA + (percent.y - .5f) * 2 * axisB;
-
-                // Mapping sphérique sans distorsion
                 float x2 = pointOnUnitCube.x * pointOnUnitCube.x;
                 float y2 = pointOnUnitCube.y * pointOnUnitCube.y;
                 float z2 = pointOnUnitCube.z * pointOnUnitCube.z;
@@ -48,21 +46,14 @@ public class TerrainFace
                 pointOnUnitSphere.x = pointOnUnitCube.x * Mathf.Sqrt(1f - y2 / 2f - z2 / 2f + (y2 * z2) / 3f);
                 pointOnUnitSphere.y = pointOnUnitCube.y * Mathf.Sqrt(1f - x2 / 2f - z2 / 2f + (x2 * z2) / 3f);
                 pointOnUnitSphere.z = pointOnUnitCube.z * Mathf.Sqrt(1f - x2 / 2f - y2 / 2f + (x2 * y2) / 3f);
-
-                // Calcul de l'élévation locale
                 float elevation = noiseFilter.Evaluate(pointOnUnitSphere);
-
-                // Positionnement spatial combinant le rayon de base de la planète et l'élévation des montagnes
                 vertices[i] = pointOnUnitSphere * (planet.radius + elevation);
-
-                // Application du dégradé selon l'altitude
                 if (planet.colorGradient != null)
                 {
                     float colorPercent = Mathf.InverseLerp(0, planet.noiseStrength, elevation);
                     colors[i] = planet.colorGradient.Evaluate(colorPercent);
                 }
 
-                // Configuration des triangles
                 if (x != resolution - 1 && y != resolution - 1)
                 {
                     triangles[triIndex] = i;
