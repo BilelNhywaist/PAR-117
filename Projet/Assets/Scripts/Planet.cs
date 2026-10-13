@@ -3,21 +3,21 @@ using UnityEngine;
 public class Planet : MonoBehaviour
 {
     [Header("Références")]
-    public Transform viewer; // La caméra du joueur (FlyCamera)
+    public Transform viewer;
 
     [Header("Paramètres de Taille")]
-    public float radius = 1000f;
+    public float radius = 100f;
 
     [Header("Paramètres du Relief")]
-    public float noiseStrength = 50f;
+    public float noiseStrength = 5f;
     public float baseRoughness = 1.5f;
     [Range(1, 8)]
     public int octaves = 5;
 
     [Header("Paramètres LOD (Quadtree)")]
     [Range(0, 6)]
-    public int maxLodLevel = 4; // Niveau maximum de division (Attention à la RAM au-delà de 5)
-    public float lodDistanceMultiplier = 2.5f; // Sensibilité de la distance pour diviser
+    public int maxLodLevel = 4;
+    public float lodDistanceMultiplier = 2.5f;
 
     [Header("Apparence")]
     public Gradient colorGradient;
@@ -25,21 +25,22 @@ public class Planet : MonoBehaviour
 
     [Header("Résolution par Chunk")]
     [Range(2, 64)]
-    public int resolution = 32; // On baisse la résolution de base, car le Quadtree va la démultiplier localement
+    public int resolution = 32;
 
     public NoiseFilter noiseFilter;
     TerrainChunk[] rootChunks;
-
     void Start()
     {
-        GeneratePlanet();
+        // Empêche de régénérer si les chunks existent déjà au lancement du jeu
+        if (rootChunks == null || rootChunks.Length == 0)
+        {
+            GeneratePlanet();
+        }
     }
-
     void Update()
     {
         if (viewer != null && rootChunks != null)
         {
-            // Actualise l'arbre Quadtree à chaque frame selon la position du joueur
             foreach (TerrainChunk chunk in rootChunks)
             {
                 chunk.UpdateChunk(viewer.position);
@@ -47,7 +48,6 @@ public class Planet : MonoBehaviour
         }
     }
 
-    // Permet de régénérer manuellement depuis l'éditeur (hors mode Play)
     void OnValidate()
     {
         if (Application.isPlaying) return;
@@ -56,10 +56,18 @@ public class Planet : MonoBehaviour
 
     public void GeneratePlanet()
     {
-        // Nettoyage de l'ancienne géométrie
+        // Nettoyage sécurisé des anciens chunks et de leurs meshes en mémoire
+        if (rootChunks != null)
+        {
+            foreach (TerrainChunk chunk in rootChunks)
+            {
+                if (chunk != null) chunk.Merge();
+            }
+        }
+
         foreach (Transform child in transform)
         {
-            DestroyImmediate(child.gameObject);
+            if (child != null) DestroyImmediate(child.gameObject);
         }
 
         noiseFilter = new NoiseFilter();
@@ -72,7 +80,6 @@ public class Planet : MonoBehaviour
 
         for (int i = 0; i < 6; i++)
         {
-            // Création des 6 faces racines avec un offset de (0,0) et une taille de 1 (100% de la face)
             rootChunks[i] = new TerrainChunk(0, Vector2.zero, 1f, directions[i], this, transform);
         }
     }

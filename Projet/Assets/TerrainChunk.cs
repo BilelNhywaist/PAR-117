@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class TerrainChunk
 {
@@ -17,6 +18,11 @@ public class TerrainChunk
     Planet planet;
     Vector3 centerPointOnPlanet;
 
+    // Cache global statique pour éviter les allocations de tableaux répétées (GC)
+    private static Dictionary<int, Vector3[]> verticesCache = new Dictionary<int, Vector3[]>();
+    private static Dictionary<int, int[]> trianglesCache = new Dictionary<int, int[]>();
+    private static Dictionary<int, Color[]> colorsCache = new Dictionary<int, Color[]>();
+
     public TerrainChunk(int lodLevel, Vector2 offset, float extent, Vector3 localUp, Planet planet, Transform parent)
     {
         this.lodLevel = lodLevel;
@@ -28,7 +34,6 @@ public class TerrainChunk
         axisA = new Vector3(localUp.y, localUp.z, localUp.x);
         axisB = Vector3.Cross(localUp, axisA);
 
-        // Création de l'objet 3D
         meshObj = new GameObject($"Chunk_LOD{lodLevel}");
         meshObj.transform.parent = parent;
         meshObj.transform.localPosition = Vector3.zero;
@@ -41,7 +46,6 @@ public class TerrainChunk
         mesh = new Mesh();
         meshFilter.sharedMesh = mesh;
 
-        // Calcul du centre exact de ce chunk pour évaluer la distance de la caméra
         Vector2 centerPercent = offset + new Vector2(0.5f, 0.5f) * extent;
         Vector3 pointOnCube = localUp + (centerPercent.x - 0.5f) * 2 * axisA + (centerPercent.y - 0.5f) * 2 * axisB;
         centerPointOnPlanet = pointOnCube.normalized * planet.radius;
@@ -51,14 +55,13 @@ public class TerrainChunk
 
     public void UpdateChunk(Vector3 viewerPosition)
     {
-        // La distance critique dépend de la taille du chunk (plus il est petit, plus il faut être près pour le diviser)
         float distanceToViewer = Vector3.Distance(centerPointOnPlanet, viewerPosition);
         float lodThreshold = planet.radius * extent * planet.lodDistanceMultiplier;
 
         if (distanceToViewer < lodThreshold && lodLevel < planet.maxLodLevel)
         {
             if (!hasChildren) Subdivide();
-            meshObj.SetActive(false); // Masque le maillage parent
+            meshObj.SetActive(false);
 
             foreach (TerrainChunk child in children)
             {
@@ -68,7 +71,7 @@ public class TerrainChunk
         else
         {
             if (hasChildren) Merge();
-            meshObj.SetActive(true); // Affiche le maillage parent
+            meshObj.SetActive(true);
         }
     }
 
@@ -77,7 +80,6 @@ public class TerrainChunk
         children = new TerrainChunk[4];
         float halfExtent = extent * 0.5f;
 
-        // Création des 4 enfants (Haut-Gauche, Haut-Droite, Bas-Gauche, Bas-Droite)
         children[0] = new TerrainChunk(lodLevel + 1, offset + new Vector2(0, halfExtent), halfExtent, localUp, planet, meshObj.transform);
         children[1] = new TerrainChunk(lodLevel + 1, offset + new Vector2(halfExtent, halfExtent), halfExtent, localUp, planet, meshObj.transform);
         children[2] = new TerrainChunk(lodLevel + 1, offset, halfExtent, localUp, planet, meshObj.transform);
@@ -86,15 +88,33 @@ public class TerrainChunk
         hasChildren = true;
     }
 
-    void Merge()
+    public void Merge()
     {
         if (!hasChildren) return;
 
+        // On appelle d'abord Merge sur tous les sous-enfants pour nettoyer toute l'arborescence récursivement
         for (int i = 0; i < 4; i++)
         {
-            children[i].Merge();
-            Object.Destroy(children[i].meshObj);
+            if (children[i] != null)
+            {
+                children[i].Merge();
+
+                if (children[i].meshObj != null)
+                {
+                    // Nettoyage explicite du mesh avant destruction pour libérer la mémoire GPU/RAM
+                    MeshFilter mf = children[i].meshObj.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null)
+                    {
+                        mf.sharedMesh.Clear();
+                    }
+
+                    // Destruction immédiate du GameObject de l'enfant
+                    Object.DestroyImmediate(children[i].meshObj);
+                }
+                children[i] = null;
+            }
         }
+
         children = null;
         hasChildren = false;
     }
@@ -102,9 +122,28 @@ public class TerrainChunk
     void ConstructMesh()
     {
         int res = planet.resolution;
-        Vector3[] vertices = new Vector3[res * res];
-        int[] triangles = new int[(res - 1) * (res - 1) * 6];
-        Color[] colors = new Color[vertices.Length];
+        int vertexCount = res * res;
+        int triangleCount = (res - 1) * (res - 1) * 6;
+
+        // Récupération ou création sécurisée des tableaux mis en cache
+        if (!verticesCache.TryGetValue(res, out Vector3[] vertices) || vertices.Length < vertexCount)
+        {
+            vertices = new Vector3[vertexCount];
+            verticesCache[res] = vertices;
+        }
+
+        if (!colorsCache.TryGetValue(res, out Color[] colors) || colors.Length < vertexCount)
+        {
+            colors = new Color[vertexCount];
+            colorsCache[res] = colors;
+        }
+
+        if (!trianglesCache.TryGetValue(res, out int[] triangles) || triangles.Length < triangleCount)
+        {
+            triangles = new int[triangleCount];
+            trianglesCache[res] = triangles;
+        }
+
         int triIndex = 0;
 
         for (int y = 0; y < res; y++)
@@ -113,7 +152,6 @@ public class TerrainChunk
             {
                 int i = x + y * res;
 
-                // Le pourcentage est désormais limité à la fraction du Quadtree (offset + extent)
                 Vector2 chunkPercent = offset + (new Vector2(x, y) / (res - 1)) * extent;
                 Vector3 pointOnUnitCube = localUp + (chunkPercent.x - 0.5f) * 2 * axisA + (chunkPercent.y - 0.5f) * 2 * axisB;
 
@@ -150,9 +188,12 @@ public class TerrainChunk
 
         mesh.Clear();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.vertices = vertices;
-        mesh.triangles = triangles;
-        mesh.colors = colors;
+
+        // Attribution directe en assignant des sous-ensembles si les tableaux du cache sont plus grands
+        mesh.SetVertices(vertices, 0, vertexCount);
+        mesh.SetTriangles(triangles, 0, triangleCount, 0);
+        mesh.SetColors(colors, 0, vertexCount);
+
         mesh.RecalculateNormals();
     }
 }
