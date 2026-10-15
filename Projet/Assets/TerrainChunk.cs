@@ -58,7 +58,6 @@ public class TerrainChunk
         if (distanceToViewer < lodThreshold && lodLevel < planet.maxLodLevel)
         {
             if (!hasChildren) Subdivide();
-            meshObj.SetActive(false); // Masque le maillage parent
 
             foreach (TerrainChunk child in children)
             {
@@ -68,7 +67,6 @@ public class TerrainChunk
         else
         {
             if (hasChildren) Merge();
-            meshObj.SetActive(true); // Affiche le maillage parent
         }
     }
 
@@ -93,7 +91,7 @@ public class TerrainChunk
         for (int i = 0; i < 4; i++)
         {
             children[i].Merge();
-            Object.Destroy(children[i].meshObj);
+            Object.DestroyImmediate(children[i].meshObj);
         }
         children = null;
         hasChildren = false;
