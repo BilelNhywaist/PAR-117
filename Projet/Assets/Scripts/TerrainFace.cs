@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class TerrainFace
 {
@@ -9,6 +10,11 @@ public class TerrainFace
     Vector3 axisB;
     Planet planet;
     NoiseFilter noiseFilter;
+
+    // Caches statiques pour éviter les allocations répétées et soulager le Garbage Collector
+    private static Dictionary<int, Vector3[]> verticesCache = new Dictionary<int, Vector3[]>();
+    private static Dictionary<int, int[]> trianglesCache = new Dictionary<int, int[]>();
+    private static Dictionary<int, Color[]> colorsCache = new Dictionary<int, Color[]>();
 
     public TerrainFace(Mesh mesh, int resolution, Vector3 localUp, Planet planet)
     {
@@ -26,9 +32,28 @@ public class TerrainFace
 
     public void ConstructMesh()
     {
-        Vector3[] vertices = new Vector3[resolution * resolution];
-        int[] triangles = new int[(resolution - 1) * (resolution - 1) * 6];
-        Color[] colors = new Color[vertices.Length];
+        int vertexCount = resolution * resolution;
+        int triangleCount = (resolution - 1) * (resolution - 1) * 6;
+
+        // Récupération ou création sécurisée dans le cache
+        if (!verticesCache.TryGetValue(resolution, out Vector3[] vertices) || vertices.Length < vertexCount)
+        {
+            vertices = new Vector3[vertexCount];
+            verticesCache[resolution] = vertices;
+        }
+
+        if (!colorsCache.TryGetValue(resolution, out Color[] colors) || colors.Length < vertexCount)
+        {
+            colors = new Color[vertexCount];
+            colorsCache[resolution] = colors;
+        }
+
+        if (!trianglesCache.TryGetValue(resolution, out int[] triangles) || triangles.Length < triangleCount)
+        {
+            triangles = new int[triangleCount];
+            trianglesCache[resolution] = triangles;
+        }
+
         int triIndex = 0;
 
         for (int y = 0; y < resolution; y++)
@@ -52,7 +77,7 @@ public class TerrainFace
                 // Calcul de l'élévation locale
                 float elevation = noiseFilter.Evaluate(pointOnUnitSphere);
 
-                // Positionnement spatial combinant le rayon de base de la planète et l'élévation des montagnes
+                // Positionnement spatial
                 vertices[i] = pointOnUnitSphere * (planet.radius + elevation);
 
                 // Application du dégradé selon l'altitude
@@ -78,9 +103,9 @@ public class TerrainFace
 
         mesh.Clear();
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.vertices = vertices;
-        mesh.triangles = triangles;
-        mesh.colors = colors;
+        mesh.SetVertices(vertices, 0, vertexCount);
+        mesh.SetTriangles(triangles, 0, triangleCount, 0);
+        mesh.SetColors(colors, 0, vertexCount);
         mesh.RecalculateNormals();
     }
 }

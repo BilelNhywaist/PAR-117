@@ -9,25 +9,26 @@ public class FlyCamera : MonoBehaviour
 
     private float rotationX = 0.0f;
     private float rotationY = 0.0f;
+    private Transform cachedTransform;
 
     void Start()
     {
-        // Verrouille et masque le curseur au centre de l'écran
+        cachedTransform = transform;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        Vector3 angles = transform.eulerAngles;
+        Vector3 angles = cachedTransform.eulerAngles;
         rotationX = angles.x;
         rotationY = angles.y;
     }
 
     void Update()
     {
-        // 1. Rotation (Souris) - L'axe de la souris reste standard
+        // 1. Rotation (Souris)
         rotationY += Input.GetAxis("Mouse X") * lookSpeed;
         rotationX -= Input.GetAxis("Mouse Y") * lookSpeed;
         rotationX = Mathf.Clamp(rotationX, -90f, 90f);
-        transform.localRotation = Quaternion.Euler(rotationX, rotationY, 0);
+        cachedTransform.localRotation = Quaternion.Euler(rotationX, rotationY, 0);
 
         // 2. Multiplicateur de vitesse
         float currentSpeed = moveSpeed;
@@ -50,16 +51,16 @@ public class FlyCamera : MonoBehaviour
             movementDirection.Normalize();
         }
 
-        transform.Translate(movementDirection * currentSpeed * Time.deltaTime);
+        cachedTransform.Translate(movementDirection * currentSpeed * Time.deltaTime, Space.Self);
 
         // 4. Déplacement vertical
         if (Input.GetKey(KeyCode.Space))
         {
-            transform.position += Vector3.up * currentSpeed * Time.deltaTime;
+            cachedTransform.position += Vector3.up * currentSpeed * Time.deltaTime;
         }
         if (Input.GetKey(KeyCode.LeftControl))
         {
-            transform.position -= Vector3.up * currentSpeed * Time.deltaTime;
+            cachedTransform.position -= Vector3.up * currentSpeed * Time.deltaTime;
         }
 
         // 5. Déverrouiller la souris
