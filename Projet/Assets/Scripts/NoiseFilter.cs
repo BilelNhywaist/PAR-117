@@ -12,14 +12,13 @@ public class NoiseFilter
 
     public float Evaluate(Vector3 point)
     {
-        // 1. Masque Continental (Définit les plaines et les zones montagneuses)
-        float maskFrequency = baseRoughness * 0.8f;
-        float maskValue = SimplexNoise.Evaluate(point.x * maskFrequency, point.y * maskFrequency, point.z * maskFrequency);
+        float continentFrequency = 0.15f;
+        float maskValue = SimplexNoise.Evaluate(point.x * continentFrequency, point.y * continentFrequency, point.z * continentFrequency);
 
-        float continentMask = Mathf.InverseLerp(-0.2f, 0.6f, maskValue);
+        float continentMask = Mathf.InverseLerp(-0.1f, 0.5f, maskValue);
+        continentMask = Mathf.Pow(continentMask, 3f);
         continentMask = Mathf.SmoothStep(0f, 1f, continentMask);
 
-        // 2. Relief détaillé (Montagnes)
         float noiseValue = 0;
         float frequency = baseRoughness * 2f;
         float amplitude = 1;
@@ -45,7 +44,6 @@ public class NoiseFilter
 
         noiseValue = Mathf.Max(0, noiseValue - minValue);
 
-        // 3. Application du masque pour aplatir certaines régions
         return noiseValue * strength * continentMask;
     }
 }

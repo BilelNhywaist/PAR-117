@@ -1,0 +1,132 @@
+﻿using UnityEngine;
+
+public class Planet : MonoBehaviour
+{
+    [Header("Références")]
+    public Transform viewer; // Glissez votre joueur manuellement ici pour tester ![cite: 4]
+
+    [Header("Paramètres de Taille")]
+    public float radius = 100f;
+
+    [Header("Paramètres du Relief")]
+    public float noiseStrength = 50f;
+    public float baseRoughness = 1.5f;
+    [Range(1, 8)]
+    public int octaves = 5;
+
+    [Header("Paramètres LOD (Quadtree)")]
+    [Range(0, 10)]
+    public int maxLodLevel = 7;
+    public float lodDistanceMultiplier = 8.0f;
+
+    [Header("Apparence")]
+    public Gradient colorGradient;
+    public Material planetMaterial;
+
+    [Header("Résolution par Chunk")]
+    [Range(2, 128)]
+    public int resolution = 32;
+
+    public NoiseFilter noiseFilter;
+    TerrainChunk[] rootChunks;
+
+    void Start()
+    {
+        // 1. Sécurité : Si le viewer n'est pas glissé dans l'inspecteur, on le cherche
+        if (viewer == null)
+        {
+            GameObject playerObj = GameObject.FindWithTag("Player");
+            if (playerObj != null) viewer = playerObj.transform;
+            else if (Camera.main != null) viewer = Camera.main.transform;
+        }
+
+        if (viewer == null)
+        {
+            Debug.LogError("ERREUR CRITIQUE : Aucun 'Viewer' (Joueur/Caméra) n'a été trouvé ! Glissez votre joueur dans le champ Viewer de la planète.");
+            return;
+        }
+        else
+        {
+            Debug.Log("Succès : Viewer détecté sur l'objet -> " + viewer.name);
+        }
+
+        // 2. Initialisation du bruit et génération
+        noiseFilter = new NoiseFilter();
+        noiseFilter.strength = noiseStrength;
+        noiseFilter.baseRoughness = baseRoughness;
+        noiseFilter.numLayers = octaves;
+
+        GeneratePlanet();
+        SpawnPlayerOnRandomSurface();
+    }
+
+    void Update()
+    {
+        if (viewer == null) return;
+
+        // Mise à jour continue des chunks
+        if (rootChunks != null)
+        {
+            foreach (TerrainChunk chunk in rootChunks)
+            {
+                if (chunk != null)
+                {
+                    chunk.UpdateChunk(viewer.position);
+                }
+            }
+        }
+    }
+
+    public void SpawnPlayerOnRandomSurface()
+    {
+        Vector3 randomDir = Random.onUnitSphere;
+        float elevation = noiseFilter != null ? noiseFilter.Evaluate(randomDir * radius) : 0f;
+        Vector3 spawnPosition = transform.position + randomDir * (radius + elevation + 10f);
+
+        Rigidbody rb = viewer.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = true;
+            viewer.position = spawnPosition;
+            rb.position = spawnPosition;
+            rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.isKinematic = false;
+        }
+        else
+        {
+            viewer.position = spawnPosition;
+        }
+
+        Debug.Log("Joueur téléporté à la surface en : " + viewer.position);
+    }
+
+    public void GeneratePlanet()
+    {
+        foreach (Transform child in transform)
+        {
+            if (child != null)
+            {
+                if (Application.isPlaying) Destroy(child.gameObject);
+                else DestroyImmediate(child.gameObject);
+            }
+        }
+
+        if (noiseFilter == null)
+        {
+            noiseFilter = new NoiseFilter();
+            noiseFilter.strength = noiseStrength;
+            noiseFilter.baseRoughness = baseRoughness;
+            noiseFilter.numLayers = octaves;
+        }
+
+= 'rootChunks = new TerrainChunk[6];
+        Vector3[] directions = { Vector3.up, Vector3.down, Vector3.left, Vector3.right, Vector3.forward, Vector3.back };
+
+        for (int i = 0; i < 6; i++)
+        {
+            rootChunks[i] = new TerrainChunk(0, Vector2.zero, 1f, directions[i], this, transform);
+        }
+        Debug.Log("Planète générée avec 6 chunks racines.");
+    }
+}

@@ -74,7 +74,6 @@ public class SimplexNoise
         int jj = j & 255;
         int kk = k & 255;
 
-        // Les 4 sommets du tétraèdre sont calculés, éliminant toute discontinuité
         float t0 = 0.6f - x0 * x0 - y0 * y0 - z0 * z0;
         if (t0 < 0) n0 = 0.0f;
         else { t0 *= t0; n0 = t0 * t0 * Grad(p[ii + p[jj + p[kk]]], x0, y0, z0); }
